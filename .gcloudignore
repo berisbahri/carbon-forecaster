@@ -1,0 +1,12 @@
+# Without this file, gcloud reuses .gitignore, which excludes the model
+# and metrics the container needs. Keep it in sync with .dockerignore.
+.gcloudignore
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+notebooks/
+tests/
+data/*
+!data/metrics.json
