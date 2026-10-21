@@ -22,3 +22,6 @@ Run the tests with `python -m pytest`.
 
 <img width="1418" height="1268" alt="image" src="https://github.com/user-attachments/assets/4078233a-c5f2-4df3-bce6-7fedb87ceeeb" />
 Useful for things like charging EVs, dishwashers and any appliance that draws a large amount of energy from the grid. Allows for consumers to access instant information and remain conscious of their carbon footprint.
+
+Alternatively, run on the URL:
+https://carbon-forecaster-671180615587.europe-west1.run.app/
