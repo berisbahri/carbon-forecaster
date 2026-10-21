@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grid Carbon Forecast</title>
+<meta name="description" content="24-hour forecast of how clean UK electricity will be, and the lowest-carbon time to run a task.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --sky: #E9EEEC;        /* page: overcast pale grey-green */
+    --paper: #F6F8F7;      /* raised surfaces: inputs, table */
+    --slate: #1C2B30;      /* ink */
+    --slate-soft: #55666C; /* secondary text, National Grid line */
+    --clean: #1D8466;      /* low carbon */
+    --soot: #8A4B33;       /* high carbon */
+    --band: #CFE6DC;       /* best window */
+    --rule: #C9D3D0;
+    --warn-bg: #F3E6D2;
+    --warn-ink: #6B4310;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --sky: #142024; --paper: #1B2A2F; --slate: #E3ECE9; --slate-soft: #93A6AB;
+      --clean: #4FC19A; --soot: #D98A68; --band: #1F4A3D; --rule: #2C3D42;
+      --warn-bg: #3A2C17; --warn-ink: #F0C98A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --sky: #142024; --paper: #1B2A2F; --slate: #E3ECE9; --slate-soft: #93A6AB;
+    --clean: #4FC19A; --soot: #D98A68; --band: #1F4A3D; --rule: #2C3D42;
+    --warn-bg: #3A2C17; --warn-ink: #F0C98A;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--sky);
+    color: var(--slate);
+    font-family: "Archivo", system-ui, sans-serif;
+    font-variation-settings: "wdth" 100;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+
+  header.site {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 1rem; flex-wrap: wrap;
+    padding-bottom: 1rem; border-bottom: 1px solid var(--rule);
+  }
+  .site-name { font-weight: 700; font-size: 1rem; margin: 0; letter-spacing: 0.01em; }
+  .issued { color: var(--slate-soft); font-size: 0.875rem; margin: 0; }
+
+  /* The question, set as a sentence with inputs inside it */
+  .ask { margin: 3rem 0 0.5rem; font-size: clamp(1.25rem, 2.6vw, 1.6rem); line-height: 1.6; }
+  .ask label { white-space: nowrap; }
+  .ask input {
+    font: inherit; font-weight: 700; color: var(--slate);
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 0.05em 0.35em; margin: 0 0.15em;
+  }
+  .ask input[type="number"] { width: 3.2em; text-align: center; }
+  .ask input[type="time"] { width: 6.2em; }
+  .ask .optional { color: var(--slate-soft); font-size: 0.8em; }
+  input:focus-visible, button:focus-visible, a:focus-visible {
+    outline: 3px solid var(--clean); outline-offset: 2px;
+  }
+  .clear-deadline {
+    font: inherit; font-size: 0.8em; color: var(--slate-soft); background: none;
+    border: 0; text-decoration: underline; cursor: pointer; padding: 0 0.2em;
+  }
+
+  /* The answer: the one loud thing on the page */
+  .answer { margin: 1.25rem 0 0; min-height: 9rem; }
+  .answer .lead { margin: 0; font-size: 1.1rem; color: var(--slate-soft); }
+  .answer .when {
+    margin: 0;
+    font-size: clamp(3.4rem, 13vw, 8.5rem);
+    line-height: 0.95;
+    font-weight: 800;
+    font-variation-settings: "wdth" 125;
+    letter-spacing: -0.02em;
+    color: var(--clean);
+  }
+  .answer .detail { margin: 0.75rem 0 0; max-width: 38rem; }
+  .answer.error .when { font-size: clamp(2rem, 6vw, 3rem); color: var(--soot); font-variation-settings: "wdth" 100; }
+
+  .notice {
+    background: var(--warn-bg); color: var(--warn-ink);
+    border-radius: 6px; padding: 0.6rem 0.9rem; margin: 1.5rem 0 0; font-size: 0.95rem;
+  }
+
+  section.block { margin-top: 3.5rem; }
+  h2 { font-size: 1.35rem; font-weight: 700; margin: 0 0 0.35rem; font-variation-settings: "wdth" 112; }
+  .sub { margin: 0 0 1.25rem; color: var(--slate-soft); max-width: 42rem; }
+
+  .chart-box { position: relative; height: 340px; }
+  @media (max-width: 600px) { .chart-box { height: 260px; } }
+
+  .key { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; margin: 0.9rem 0 0; padding: 0; list-style: none; font-size: 0.9rem; color: var(--slate-soft); }
+  .key li { display: flex; align-items: center; gap: 0.5rem; }
+  .swatch { display: inline-block; width: 1.6rem; height: 0.7rem; border-radius: 2px; }
+  .swatch.ours { background: linear-gradient(90deg, var(--clean), var(--soot)); }
+  .swatch.ng { height: 0; border-top: 2px dashed var(--slate-soft); border-radius: 0; }
+  .swatch.band { background: var(--band); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border-radius: 6px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; font-size: 0.9rem; color: var(--slate-soft); }
+  td.num, th.num { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+  tr.ours td { font-weight: 700; }
+  .table-scroll { overflow-x: auto; }
+  .notes { margin: 0.9rem 0 0; padding-left: 1.1rem; color: var(--slate-soft); font-size: 0.9rem; max-width: 44rem; }
+
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--slate-soft); font-size: 0.9rem; }
+  footer p { margin: 0.3rem 0; max-width: 46rem; }
+  a { color: inherit; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .answer .when { transition: opacity 200ms ease; }
+    .answer.loading .when { opacity: 0.35; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <p class="site-name">Grid carbon forecast</p>
+    <p class="issued" id="issued">Loading forecast…</p>
+  </header>
+
+  <main>
+    <p class="ask">
+      <label>I need <input id="hours" type="number" min="0.5" max="24" step="0.5" value="2" inputmode="decimal" aria-label="Task length in hours"> hours of power,</label>
+      <label>finished by <input id="deadline" type="time" step="1800" aria-label="Optional finish time, UK time"></label>
+      <span class="optional">(optional)</span>
+      <button class="clear-deadline" id="clear-deadline" type="button" hidden>clear</button>
+    </p>
+
+    <div class="answer loading" id="answer" aria-live="polite">
+      <p class="lead">Start at</p>
+      <p class="when" id="when">––:––</p>
+      <p class="detail" id="detail">Working out the cleanest time in the next 24 hours.</p>
+    </div>
+
+    <p class="notice" id="stale" hidden>This forecast couldn't be refreshed just now, so you're seeing the last saved one.</p>
+
+    <section class="block" aria-labelledby="chart-title">
+      <h2 id="chart-title">The next 24 hours</h2>
+      <p class="sub">How much CO₂ each unit of GB electricity is forecast to emit, in grams per kWh. Lower means more wind, solar and nuclear on the grid.</p>
+      <div class="chart-box"><canvas id="chart" role="img" aria-label="Line chart of forecast carbon intensity over the next 24 hours"></canvas></div>
+      <ul class="key">
+        <li><span class="swatch ours"></span>Our forecast, coloured clean to dirty</li>
+        <li><span class="swatch ng"></span>National Grid's forecast</li>
+        <li><span class="swatch band"></span>Cleanest window for your task</li>
+      </ul>
+    </section>
+
+    <section class="block" aria-labelledby="acc-title">
+      <h2 id="acc-title">How accurate is it?</h2>
+      <p class="sub" id="acc-sub">Average error on the most recent months of data, which the model never saw during training.</p>
+      <div class="table-scroll">
+        <table id="metrics">
+          <thead><tr><th>Method</th><th class="num">Average error (g/kWh)</th><th class="num">Better than "same time yesterday"</th></tr></thead>
+          <tbody><tr><td colspan="3">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <ul class="notes" id="metric-notes"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Forecasts come from a LightGBM model trained on National Grid's Carbon Intensity API and Open-Meteo weather data. Times are UK time.</p>
+    <p>Use the data yourself: <a href="/docs">API documentation</a>, <a href="/forecast">/forecast</a>, <a href="/best-time?hours=2">/best-time?hours=2</a>, <a href="/metrics">/metrics</a>.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const UK = "Europe/London";
+  const fmtTime = new Intl.DateTimeFormat("en-GB", { timeZone: UK, hour: "2-digit", minute: "2-digit" });
+  const fmtDayTime = new Intl.DateTimeFormat("en-GB", { timeZone: UK, weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const fmtDay = new Intl.DateTimeFormat("en-GB", { timeZone: UK, weekday: "short" });
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const rgba = (hex, a) => {
+    const n = parseInt(hex.replace("#", ""), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+
+  let points = [];      // [{t: Date, pred, ng}]
+  let chart = null;
+  let band = null;      // {start: index, slots}
+
+  async function getJSON(url) {
+    const r = await fetch(url);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.detail || `${url} returned ${r.status}`);
+    return body;
+  }
+
+  // ---------- forecast + chart ----------
+  async function loadForecast() {
+    const data = await getJSON("/forecast");
+    points = data.points.map(p => ({ t: new Date(p.time), pred: p.pred, ng: p.national_grid }));
+    $("issued").textContent = `Forecast made ${fmtDayTime.format(new Date(data.issued_at))}`;
+    $("stale").hidden = !data.stale;
+    drawChart();
+  }
+
+  // Colour by actual intensity, so the same colour always means the same value
+  function intensityGradient(context, alpha) {
+    const { chart: c } = context;
+    const { ctx, chartArea, scales } = c;
+    if (!chartArea) return null;
+    const y = scales.y;
+    const g = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+    const at = (v) => Math.min(1, Math.max(0, (chartArea.bottom - y.getPixelForValue(v)) / (chartArea.bottom - chartArea.top)));
+    const clean = css("--clean"), soot = css("--soot");
+    g.addColorStop(0, rgba(clean, alpha));
+    g.addColorStop(at(60), rgba(clean, alpha));
+    g.addColorStop(Math.max(at(60), at(220)), rgba(soot, alpha));
+    g.addColorStop(1, rgba(soot, alpha));
+    return g;
+  }
+
+  const bandPlugin = {
+    id: "bestBand",
+    beforeDatasetsDraw(c) {
+      if (!band) return;
+      const { ctx, chartArea: { top, bottom, left, right }, scales: { x } } = c;
+      const step = x.getPixelForValue(1) - x.getPixelForValue(0);
+      const x0 = Math.max(left, x.getPixelForValue(band.start) - step / 2);
+      const x1 = Math.min(right, x.getPixelForValue(band.start + band.slots - 1) + step / 2);
+      ctx.save();
+      ctx.fillStyle = css("--band");
+      ctx.fillRect(x0, top, x1 - x0, bottom - top);
+      ctx.restore();
+    },
+  };
+
+  function tickLabel(i) {
+    const t = points[i].t;
+    const hm = fmtTime.format(t);
+    return hm === "00:00" ? `${fmtDay.format(t)} 00:00` : hm;
+  }
+
+  function drawChart() {
+    const ink = css("--slate-soft"), rule = css("--rule");
+    const labels = points.map((_, i) => i);
+    const datasets = [
+      {
+        label: "Our forecast",
+        data: points.map(p => p.pred),
+        borderColor: (ctx) => intensityGradient(ctx, 1),
+        backgroundColor: (ctx) => intensityGradient(ctx, 0.18),
+        fill: "start", borderWidth: 3, pointRadius: 0, pointHoverRadius: 4, tension: 0.3,
+      },
+      {
+        label: "National Grid",
+        data: points.map(p => p.ng),
+        borderColor: ink, borderDash: [6, 5], borderWidth: 1.5,
+        pointRadius: 0, pointHoverRadius: 3, tension: 0.3, fill: false, spanGaps: true,
+      },
+    ];
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets = datasets;
+      chart.update();
+      return;
+    }
+    chart = new Chart($("chart"), {
+      type: "line",
+      data: { labels, datasets },
+      plugins: [bandPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: reduceMotion ? false : { duration: 600 },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => fmtDayTime.format(points[items[0].dataIndex].t),
+              label: (item) => item.raw == null ? null : `${item.dataset.label}: ${Math.round(item.raw)} g/kWh`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: ink, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, callback: (v) => tickLabel(v) },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: rule },
+            border: { display: false },
+            ticks: { color: ink, maxTicksLimit: 6 },
+            title: { display: true, text: "g CO₂ per kWh", color: ink },
+          },
+        },
+      },
+    });
+  }
+
+  // ---------- best time ----------
+  // The time box holds a UK clock time; turn it into the next matching slot end
+  function deadlineISO() {
+    const v = $("deadline").value;
+    $("clear-deadline").hidden = !v;
+    if (!v || !points.length) return null;
+    const [h, m] = v.split(":").map(Number);
+    const wanted = `${String(h).padStart(2, "0")}:${m < 30 ? "00" : "30"}`;
+    for (const p of points) {
+      const end = new Date(p.t.getTime() + 30 * 60 * 1000);
+      if (fmtTime.format(end) === wanted) return end.toISOString();
+    }
+    return null;
+  }
+
+  async function loadBest() {
+    const answer = $("answer");
+    const hours = parseFloat($("hours").value);
+    if (!(hours > 0 && hours <= 24)) {
+      showError("Enter a task length between half an hour and 24 hours.");
+      return;
+    }
+    answer.classList.add("loading");
+    const params = new URLSearchParams({ hours: String(hours) });
+    const deadline = deadlineISO();
+    if (deadline) params.set("finish_by", deadline);
+    try {
+      const best = await getJSON(`/best-time?${params}`);
+      showBest(best);
+    } catch (e) {
+      showError(e.message.includes("half-hours")
+        ? "That task doesn't fit before your finish time. Try a later time or a shorter task."
+        : e.message);
+    }
+  }
+
+  function showBest(best) {
+    const answer = $("answer");
+    answer.classList.remove("loading", "error");
+    const start = new Date(best.start), end = new Date(best.end);
+    const startIdx = points.findIndex(p => p.t.getTime() === start.getTime());
+    const isNow = startIdx === 0;
+
+    answer.querySelector(".lead").textContent = isNow ? "Best to" : "Start at";
+    $("when").textContent = isNow ? "Start now" : fmtDayTime.format(start);
+
+    const avg = Math.round(best.avg_intensity);
+    const saving = Math.round(best.saving_pct);
+    const runs = `It runs until ${fmtDayTime.format(end)} at about ${avg} g of CO₂ per kWh`;
+    $("detail").textContent = isNow || saving < 2
+      ? `${runs}. Nothing in the next 24 hours is meaningfully cleaner than starting now.`
+      : `${runs}, ${saving}% cleaner than starting straight away.`;
+
+    band = startIdx >= 0 ? { start: startIdx, slots: Math.round(best.hours * 2) } : null;
+    if (chart) chart.update(reduceMotion ? "none" : undefined);
+  }
+
+  function showError(message) {
+    const answer = $("answer");
+    answer.classList.remove("loading");
+    answer.classList.add("error");
+    answer.querySelector(".lead").textContent = "";
+    $("when").textContent = "No recommendation";
+    $("detail").textContent = message;
+    band = null;
+    if (chart) chart.update("none");
+  }
+
+  // ---------- accuracy table ----------
+  const NAMES = {
+    model: "Our model",
+    model_no_weather: "Our model without weather",
+    yesterday: "Same time yesterday",
+    last_week: "Same time last week",
+    national_grid: "National Grid (short-range forecast)",
+  };
+
+  async function loadMetrics() {
+    const tbody = $("metrics").querySelector("tbody");
+    try {
+      const m = await getJSON("/metrics");
+      const rows = Object.entries(m.results).sort((a, b) => a[1].mae - b[1].mae);
+      tbody.innerHTML = "";
+      for (const [key, r] of rows) {
+        const tr = document.createElement("tr");
+        if (key === "model") tr.className = "ours";
+        const skill = r["skill_vs_yesterday_%"];
+        const skillText = key === "yesterday" || skill == null ? "–"
+          : skill > 0 ? `${Math.round(skill)}%` : `${Math.abs(Math.round(skill))}% worse`;
+        tr.innerHTML = `<td></td><td class="num">${r.mae.toFixed(1)}</td><td class="num">${skillText}</td>`;
+        tr.firstChild.textContent = NAMES[key] || key;
+        tbody.appendChild(tr);
+      }
+      const start = new Date(m.test_start), end = new Date(m.test_end);
+      const dfmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      $("acc-sub").textContent =
+        `Average error from ${dfmt.format(start)} to ${dfmt.format(end)}, a period the model never saw during training.`;
+      const notes = $("metric-notes");
+      notes.innerHTML = "";
+      for (const n of m.notes || []) {
+        const li = document.createElement("li");
+        li.textContent = n;
+        notes.appendChild(li);
+      }
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="3"></td></tr>`;
+      tbody.querySelector("td").textContent = "No accuracy results yet. Run python -m src.train to create them.";
+    }
+  }
+
+  // ---------- wiring ----------
+  let timer;
+  const debounced = () => { clearTimeout(timer); timer = setTimeout(loadBest, 300); };
+  $("hours").addEventListener("input", debounced);
+  $("deadline").addEventListener("change", loadBest);
+  $("clear-deadline").addEventListener("click", () => { $("deadline").value = ""; loadBest(); $("deadline").focus(); });
+
+  async function refresh() {
+    try {
+      await loadForecast();
+      await loadBest();
+    } catch (e) {
+      $("issued").textContent = "Forecast unavailable";
+      showError(`Couldn't load the forecast: ${e.message}. Check the server is running and that models/model.joblib exists.`);
+    }
+  }
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!chart) return;
+    chart.destroy();
+    chart = null;
+    drawChart();
+  });
+  refresh();
+  loadMetrics();
+  setInterval(refresh, 30 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
